@@ -185,7 +185,7 @@ pub fn kv_conf_process<R: io::BufRead>(mut rdr: R) -> io::Result<HashMap<String,
     let mut map: HashMap<String, String> = HashMap::new();
     let mut buffer = String::new();
 
-    loop {
+    for linenum in 1.. {
         match rdr.read_line(&mut buffer) {
             Err(e) => return Err(e),
             Ok(n) if n == 0 => {
@@ -193,13 +193,21 @@ pub fn kv_conf_process<R: io::BufRead>(mut rdr: R) -> io::Result<HashMap<String,
                 break;
             },
             Ok(n) if n > CONF_LINE_MAX => {
-                return Err(io::Error::new(io::ErrorKind::InvalidInput, "line too long"));
+                let msg = format!("line {} too long", linenum);
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, msg));
             },
             Ok(_) => {},
         };
 
         match kv_process(&mut buffer, &mut map) {
-            Err(e) => return Err(e),
+            Err(e) => {
+                let msg = if e.get_ref().is_some() {
+                    format!("line {}: {:?}", linenum, e.get_ref())
+                } else {
+                    format!("error on line {}", linenum)
+                };
+                return Err(io::Error::new(e.kind(), msg));
+            },
             // remainder may contain multi-line string
             Ok(remainder) if remainder.is_some() => buffer = remainder.unwrap(),
             Ok(_) => buffer.clear(),
